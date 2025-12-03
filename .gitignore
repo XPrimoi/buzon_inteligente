@@ -1,0 +1,9 @@
+# Build files
+build/
+target/
+bin/
+
+# IDE / SO Files
+.DS_Store
+.vscode/
+.idea/
