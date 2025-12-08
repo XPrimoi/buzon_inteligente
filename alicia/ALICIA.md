@@ -1,10 +1,8 @@
 # Repositorio de Alicia
 
-Preséntase a captura do deseño de Fritzing dos nodos IoT x E y, cuxa implementación atópase no arquivo XXXX.c
+Preséntase a captura do deseño de Fritzing dos nodos IoT _Digital IR Receiver_ e _Digital IR Transmitter_, cuxa implementación atópase no arquivo p2/ir_mqtt.c
 
-_Here is the Fritzing design capture of the IoT nodes X and Y, whose implementation can be found in the file XXXX.c._
+_Here is the Fritzing design capture of the IoT nodes  and Y, whose implementation can be found in the file p2/ir_mqtt.ino._
 
-SIN ACABAR
-
-<img width="500" height="600" alt="image" src="https://github.com/user-attachments/assets/5ceb3cc3-e2eb-4451-9032-64c6fd8036b2" />
+<img width="500" height="600" alt="Fritzing IoT nodes design" src="" />
 
