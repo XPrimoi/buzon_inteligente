@@ -1,8 +1,8 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-const char* ssid = "MatePad";        
-const char* password = "12345678.";  
+const char* ssid = "Add here WIFI name";        
+const char* password = "Add here WIFI password";  
 const char* mqttServer = "test.mosquitto.org";
 const int mqttPort = 1883;
 const char* mqttUser = "";
