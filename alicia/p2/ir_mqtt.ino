@@ -34,7 +34,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   // Publicar estado con contador
   String statusMsg = "Carta detectada en " + msg + " | Total: " + String(cartaCount);
-  client.publish("NAPIoTT2025/buzonInteligente/ir/status", statusMsg.c_str());
+  client.publish("NAPIoT2025/buzonInteligente/ir/status", statusMsg.c_str());
 }
 
 void setup() {
@@ -76,12 +76,12 @@ void loop() {
   delay(10);
   digitalWrite(IR_TRANSMITTER_PIN, LOW);
 
-  // Lectura ficticia del receptor
+  // Lectura del receptor IR
   int irValue = digitalRead(IR_RECEIVER_PIN);
 
   char str[16];
   sprintf(str, "%d", irValue);
-  client.publish("devices/NAPIoT-P2", str);
+  client.publish("NAPIoT2025/buzonInteligente/ir/event", str);
 
   Serial.print("Lectura IR: ");
   Serial.println(irValue);
