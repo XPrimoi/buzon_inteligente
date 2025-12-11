@@ -1,0 +1,3 @@
+Se presenta un código arduino que primero se configura la conexión wifi para poder conectarse al broker Mosquitto, para poder publicar o subscribirse a un tópic.
+Junto con ello se trabaja en un sistema de guardado de información para poder añadir o eliminar dispositivos rfid, para ello, se guarda el código de una tarjeta rfid como tarjeta maestra, esta permite guardar o eliminar otros tipos de tarjetas rfid, para tener un sistema multiusuario en el buzón. 
+Al pasar al modo de uso normal, si se acerca una tarjeta correcta se envía por el tópic que la tarjeta es una de las admitidas en el sistema, y si es errónea se envia un aviso de error al tópic NAPIoT2025/buzonInteligente/rfid.
