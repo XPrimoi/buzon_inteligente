@@ -13,7 +13,7 @@ const char* mqttUser = "";
 const char* mqttPassword = "";
 
 // TOPIC MQTT
-const char* mqttTopic = "devices/NAPIoT-USC-1"; 
+const char* mqttTopic = "NAPIoT2025/buzonInteligente/rfid"; 
 
 // Configuracion de pines de rfid
 #define SS_PIN  A1
