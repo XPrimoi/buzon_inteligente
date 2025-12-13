@@ -1,0 +1,4 @@
+Las conexiones del sensor de colisión son las siguiente:
+- G -> Tierra
+- V -> 3,3V
+- S -> Conexión al pin IO8 del ESP32
