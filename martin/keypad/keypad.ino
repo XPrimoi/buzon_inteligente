@@ -41,6 +41,41 @@ PubSubClient mqttClient(wifiClient); // Cliente MQTT
 char codigo[CODIGO_MAX_LEN + 1] = {0}; // Almacén del código actual
 int codigoSize = 0;                    // Logitud del código actual
 
+#define RGB_RED_PIN D3   // Pin del terminal R del led RGB
+#define RGB_GREEN_PIN D2 // Pin del terminal G del led RGB
+#define RGB_BLUE_PIN D5  // Pin del terminal B del led RGB
+
+#define RGB_LIFETIME_MILLIS 5000 // Tiempo de iluminación del led RGB
+long unsigned rgbOnUntil = 0;    // Marca de tiempo hasta la cual el led RGB debe estar encendido
+
+#define RGB_MAX_VALUE 255 
+
+typedef struct {
+  int r;
+  int g;
+  int b;
+} Color;
+
+#define COLOR_BLANK (Color){0}           // Color "apagado" 
+#define COLOR_RED (Color){255, 0, 0}    // Color rojo
+#define COLOR_GREEN (Color){0, 255, 0} // Color verde
+
+// Ilumincación del led RGB con un color específico
+void iluminarRGB(Color rgb) {
+  analogWrite(RGB_RED_PIN, RGB_MAX_VALUE - rgb.r);
+  analogWrite(RGB_GREEN_PIN, RGB_MAX_VALUE - rgb.g);
+  analogWrite(RGB_BLUE_PIN, RGB_MAX_VALUE - rgb.b);
+}
+
+// Configuración inicial del led RGB
+void configurarRGB() {
+  pinMode(RGB_RED_PIN, OUTPUT);
+  pinMode(RGB_GREEN_PIN, OUTPUT);
+  pinMode(RGB_BLUE_PIN, OUTPUT);
+
+  iluminarRGB(COLOR_BLANK);
+}
+
 // Conexión con la red WiFi
 void conectarWiFi() {
   if (WiFi.status() == WL_CONNECTED) { return; }
@@ -82,9 +117,12 @@ void conectarBrokerMQTT() {
 void validacionCodigo(bool valido) {
   if (valido) {
     Serial.println("El código introducido es válido. Abriendo buzón.");
+    iluminarRGB(COLOR_GREEN);
   } else {
     Serial.println("El código introducido no es válido!");
+    iluminarRGB(COLOR_RED);
   }
+  rgbOnUntil = millis() + RGB_LIFETIME_MILLIS;
 }
 
 // Callback para la recepción de mensajes MQTT
@@ -108,12 +146,15 @@ void subscribeTopicsMQTT() {
 void setup(){
   Serial.begin(9600);
 
+  configurarRGB();       // Configuracion LED RGB
   conectarWiFi();        // Conexión WiFi
   conectarBrokerMQTT();  // Conexión MQTT
   subscribeTopicsMQTT(); // Subscripción a topicos de respuestas
 }
 
 void loop() {
+  long unsigned currentMillis = millis();
+  
   mqttClient.loop();
 
   // Reconectar en caso de perder conexión WiFi
@@ -122,6 +163,12 @@ void loop() {
     conectarWiFi();
   }
 
+  // Apagar led RGB si se acaba el tiempo de iluminación
+  if (rgbOnUntil <= currentMillis) {
+    iluminarRGB(COLOR_BLANK);
+  }
+
+  // Comprobar pulsación de tecla
   char pressedKey = keypad.getKey();
   if (pressedKey != 0) {
     Serial.print("Tecla pulsada: ");

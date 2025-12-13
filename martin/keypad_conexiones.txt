@@ -1,0 +1,13 @@
+El keypad tiene 8 conectores: 4 entradas para las filas y 4 salidas para las columnas. En ese orden, de izquierda a derecha de arriba a abajo:
+
+En orden: r1 r2 r3 r4 c1 c2 c3 c4
+
+En perspectiva cenital:
+ 
+ r1
+ r2
+ r3
+ r4
+   c1 c2 c3 c4
+
+La recopilación de datos de pulsación de tiene que hacer mediante pooling. Enviando señales a cada fila y recuperar las señales recibidas de cada columna, de forma que se puede saber que botones están pulsados en cada fila.
