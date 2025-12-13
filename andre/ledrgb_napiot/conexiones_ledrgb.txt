@@ -1,0 +1,5 @@
+las conexiones del led rgb son:
+- V -> 3,3V
+- B -> IO4
+- R -> IO10
+- G -> IO11
