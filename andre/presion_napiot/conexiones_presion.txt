@@ -1,0 +1,4 @@
+Conexiones Sensor de Presion
+- G -> Tierra
+- V -> 3,3 V
+- S -> IO6 del ESP32
