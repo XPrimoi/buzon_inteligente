@@ -32,8 +32,6 @@ WiFiClient wifiClient; // Cliente WiFi para el cliente MQTT
 
 #define MQTT_TOPIC_CODIGO "NAPIoT2025/buzonInteligente/keypad/codigo"
 #define MQTT_TOPIC_CODIGO_CHECK "NAPIoT2025/buzonInteligente/keypad/codigo/check"
-#define MQTT_TOPIC_CODIGO_ACTUALIZAR "NAPIoT2025/buzonInteligente/keypad/codigo/update"
-#define MQTT_TOPIC_CODIGO_ACTUALIZADO "NAPIoT2025/buzonInteligente/keypad/codigo/updated"
 
 PubSubClient mqttClient(wifiClient); // Cliente MQTT
 
@@ -41,30 +39,57 @@ PubSubClient mqttClient(wifiClient); // Cliente MQTT
 char codigo[CODIGO_MAX_LEN + 1] = {0}; // Almacén del código actual
 int codigoSize = 0;                    // Logitud del código actual
 
+#define CODIGO_LIFETIME_MILLIS 10000 // Tiempo de guardado de código entre pulsaciones del keypad
+long unsigned codigoSavedUntil = 0;    // Marca de tiempo hasta la cual el código del keypad será guardado en la variable
+
 #define RGB_RED_PIN D3   // Pin del terminal R del led RGB
 #define RGB_GREEN_PIN D2 // Pin del terminal G del led RGB
 #define RGB_BLUE_PIN D5  // Pin del terminal B del led RGB
 
 #define RGB_LIFETIME_MILLIS 5000 // Tiempo de iluminación del led RGB
+boolean rgbOn = false;
 long unsigned rgbOnUntil = 0;    // Marca de tiempo hasta la cual el led RGB debe estar encendido
 
 #define RGB_MAX_VALUE 255 
 
 typedef struct {
-  int r;
-  int g;
-  int b;
+  unsigned r;
+  unsigned g;
+  unsigned b;
 } Color;
 
 #define COLOR_BLANK (Color){0}           // Color "apagado" 
-#define COLOR_RED (Color){255, 0, 0}    // Color rojo
-#define COLOR_GREEN (Color){0, 255, 0} // Color verde
+#define COLOR_RED (Color){255, 0, 0}     // Color rojo
+#define COLOR_GREEN (Color){0, 255, 0}   // Color verde
+#define COLOR_BLUE (Color){0, 0, 255}    // Color azul
+#define COLOR_AMBER (Color){255, 190, 0} // Color ambar
 
-// Ilumincación del led RGB con un color específico
-void iluminarRGB(Color rgb) {
-  analogWrite(RGB_RED_PIN, RGB_MAX_VALUE - rgb.r);
-  analogWrite(RGB_GREEN_PIN, RGB_MAX_VALUE - rgb.g);
-  analogWrite(RGB_BLUE_PIN, RGB_MAX_VALUE - rgb.b);
+void setRGB(Color color) {
+  analogWrite(RGB_RED_PIN, RGB_MAX_VALUE - color.r);
+  analogWrite(RGB_GREEN_PIN, RGB_MAX_VALUE - color.g);
+  analogWrite(RGB_BLUE_PIN, RGB_MAX_VALUE - color.b);
+}
+
+// Iluminación del led RGB con un color específico
+void iluminarRGB(Color color) {
+  Serial.print("Led RGB iluminando de color: ");
+  Serial.print(color.r);
+  Serial.print(", ");
+  Serial.print(color.g);
+  Serial.print(", ");
+  Serial.println(color.b);
+
+  setRGB(color);
+  rgbOn = true;
+  rgbOnUntil = millis() + RGB_LIFETIME_MILLIS;
+}
+
+// Apagar RGB
+void apagarRGB() {
+  Serial.println("Led RGB apagado");
+  
+  setRGB(COLOR_BLANK);
+  rgbOn = false;
 }
 
 // Configuración inicial del led RGB
@@ -73,7 +98,7 @@ void configurarRGB() {
   pinMode(RGB_GREEN_PIN, OUTPUT);
   pinMode(RGB_BLUE_PIN, OUTPUT);
 
-  iluminarRGB(COLOR_BLANK);
+  apagarRGB();
 }
 
 // Conexión con la red WiFi
@@ -122,7 +147,6 @@ void validacionCodigo(bool valido) {
     Serial.println("El código introducido no es válido!");
     iluminarRGB(COLOR_RED);
   }
-  rgbOnUntil = millis() + RGB_LIFETIME_MILLIS;
 }
 
 // Callback para la recepción de mensajes MQTT
@@ -164,13 +188,22 @@ void loop() {
   }
 
   // Apagar led RGB si se acaba el tiempo de iluminación
-  if (rgbOnUntil <= currentMillis) {
-    iluminarRGB(COLOR_BLANK);
+  if (rgbOn && rgbOnUntil <= currentMillis) {
+    apagarRGB();
+  }
+
+  // Borrar el código guardado si el tiempo límite es sobrepasado
+  if (codigoSize > 0 && codigoSavedUntil <= currentMillis) {
+    Serial.println("Demasiado tiempo entre pulsaciones. Introduzca el código de nuevo.");
+    codigoSize = 0;
+    iluminarRGB(COLOR_BLUE);
   }
 
   // Comprobar pulsación de tecla
   char pressedKey = keypad.getKey();
-  if (pressedKey != 0) {
+  if (pressedKey) {
+    codigoSavedUntil = currentMillis + CODIGO_LIFETIME_MILLIS;
+
     Serial.print("Tecla pulsada: ");
     Serial.println(pressedKey);
     switch(pressedKey) {      
@@ -202,6 +235,7 @@ void loop() {
           codigoSize++;
         } else {
           Serial.println("\nLongitud máxima de código alcanzada!");
+          iluminarRGB(COLOR_AMBER);
         }
       } break;
     }
