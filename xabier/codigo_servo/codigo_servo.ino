@@ -19,6 +19,11 @@ const int ledPin = LED_BUILTIN;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+unsigned long ultimoTiempo = 0;
+const long intervalo = 500;
+int ultimoAngulo= -1;
+bool flag = false;
+
 // Función para conectar á WiFi
 void setup_wifi() {
   delay(10);
@@ -59,6 +64,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   } else {
     Serial.println("Comando descoñecido");
   }
+  flag = true;
 }
 
 // Reconecta co broker MQTT se se perde a conexión
@@ -84,6 +90,7 @@ void reconnect() {
 
 void setup() {
   servo.attach(servoPin);
+  servo.write(0);
 
   // Configuración do pin do LED
   pinMode(ledPin, OUTPUT);
@@ -103,5 +110,21 @@ void loop() {
     reconnect();
   }
   client.loop();
+
+  if(flag){
+    unsigned long tiempoActual = millis();
+    if (tiempoActual - ultimoTiempo >= intervalo) {
+      
+      ultimoTiempo = tiempoActual;
+
+      char str[16];
+      sprintf(str, "%d", servo.read());
+      bool publica = client.publish("NAPIoT2025/buzonInteligente/servoAngulo", str);
+      Serial.print("Servo en ");
+      Serial.println(str);
+      Serial.println(publica);
+      flag = false;
+    }
+  }
 }
 
