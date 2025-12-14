@@ -6,8 +6,8 @@ Servo servo;
 const int servoPin = 10;
 
 // Credenciais da rede Wifi
-const char* ssid = "iPhone_Xabier";
-const char* password = "TortugasNinja";
+const char* ssid = "ssid";
+const char* password = "psswrd";
 
 // Configuración do broker MQTT
 const char* mqtt_server = "test.mosquitto.org";
