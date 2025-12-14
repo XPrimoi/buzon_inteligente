@@ -117,12 +117,9 @@ void loop() {
       
       ultimoTiempo = tiempoActual;
 
-      char str[16];
-      sprintf(str, "%d", servo.read());
+      char str[64] = {0};
+      sprintf(str, "{\"servoAngulo\": %d}", servo.read());
       bool publica = client.publish("NAPIoT2025/buzonInteligente/servoAngulo", str);
-      Serial.print("Servo en ");
-      Serial.println(str);
-      Serial.println(publica);
       flag = false;
     }
   }
