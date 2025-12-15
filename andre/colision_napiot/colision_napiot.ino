@@ -4,8 +4,8 @@
 // ----------------------------
 // CONFIG WIFI & MQTT
 // ----------------------------
-const char* ssid = "Grelo_Casa"; 
-const char* password = "NH4zX6PT";
+const char* ssid = "Wifi"; 
+const char* password = "Contrasena";
 
 const char* mqttServer = "test.mosquitto.org";
 const int mqttPort = 1883;
