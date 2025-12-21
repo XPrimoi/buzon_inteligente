@@ -3,16 +3,21 @@
 #include <ESP32Servo.h>
 
 Servo servo;
-const int servoPin = 10;
+const int servoPin = 13;
+const int colisionPin = 38;
+const int wledPin = 10;
+const int bluePin = 4;
+const int greenPin = 5;
+const int redPin = 6;
 
 // Credenciais da rede Wifi
-const char* ssid = "ssid";
-const char* password = "psswrd";
+const char* ssid = "iPhone_Xabier";
+const char* password = "TortugasNinja";
 
 // Configuración do broker MQTT
 const char* mqtt_server = "test.mosquitto.org";
 const int mqtt_port = 1883;
-const char* mqtt_topic = "NAPIoT2025/buzonInteligente/puerta/servo";
+const char* mqtt_topic = "NAPIoT2025/buzonInteligente/puerta/claveApertura";
 
 // Led que se acenderá/apagará
 const int ledPin = LED_BUILTIN;
@@ -23,6 +28,9 @@ unsigned long ultimoTiempo = 0;
 const long intervalo = 500;
 int ultimoAngulo= -1;
 bool flag = false;
+
+int estadoActualColision;
+int estadoAnteriorColision;
 
 // Función para conectar á WiFi
 void setup_wifi() {
@@ -56,11 +64,21 @@ void callback(char* topic, byte* payload, unsigned int length) {
   if (message == "0") {
     digitalWrite(ledPin, LOW); // Apaga o LED
     Serial.println("LED OFF");
-    servo.write(0);
+    analogWrite(redPin, 0);
+    delay(1000);
+    analogWrite(redPin, 255);
   } else if (message == "1") {
     digitalWrite(ledPin, HIGH); // Acende o LED
     Serial.println("LED ON");
+
+    analogWrite(greenPin, 0);
+
     servo.write(180);
+    delay(650);
+    servo.write(90);
+
+    analogWrite(greenPin, 255);
+    
   } else {
     Serial.println("Comando descoñecido");
   }
@@ -90,7 +108,19 @@ void reconnect() {
 
 void setup() {
   servo.attach(servoPin);
-  servo.write(0);
+  servo.write(90);
+
+  pinMode(colisionPin, INPUT);
+  pinMode(wledPin, OUTPUT);
+  digitalWrite(wledPin, LOW);
+
+  pinMode(redPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+
+  analogWrite(redPin, 255);
+  analogWrite(bluePin, 255);
+  analogWrite(greenPin, 255);
 
   // Configuración do pin do LED
   pinMode(ledPin, OUTPUT);
@@ -110,6 +140,22 @@ void loop() {
     reconnect();
   }
   client.loop();
+
+  estadoAnteriorColision = estadoActualColision;
+  estadoActualColision = digitalRead(colisionPin);
+
+  if(estadoActualColision == 0) {
+    digitalWrite(wledPin, LOW);
+
+    if(estadoAnteriorColision == 1){
+      Serial.println("Cerrando puerta");
+      servo.write(0);
+      delay(650);
+      servo.write(90);
+    }
+  } else {
+    digitalWrite(wledPin, HIGH);
+  }
 
   if(flag){
     unsigned long tiempoActual = millis();
