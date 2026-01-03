@@ -143,7 +143,7 @@ void loop() {
                 codigo[codigoSize] = 0;
 
                 // Enviamos el código al topico MQTT
-                if (mqttClient.publish(MQTT_TOPIC_CODIGO, codigo)) {
+                if (mqttClient.publish(MQTT_TOPIC_KEYPAD, codigo)) {
                     Serial.print("Código de desbloqueo enviado: ");
                     Serial.println(codigo);
                 } else {
