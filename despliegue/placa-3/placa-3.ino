@@ -3,8 +3,8 @@
 #include <time.h>
 
 // ===== WIFI & MQTT CONFIGURATION =====
-const char* ssid = "MatePad";
-const char* password = "12345678.";
+const char* ssid = "Add ssid";
+const char* password = "Add password";
 const char* mqttServer = "test.mosquitto.org";
 const int mqttPort = 1883;
 const char* mqttUser = "";
