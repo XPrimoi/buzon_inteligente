@@ -17,7 +17,7 @@ const char* password = "psswrd";
 // Configuración do broker MQTT
 const char* mqtt_server = "test.mosquitto.org";
 const int mqtt_port = 1883;
-const char* mqtt_topic = "NAPIoT2025/buzonInteligente/puerta/claveApertura";
+const char* mqtt_topic = "NAPIoT2025/buzon/servo/desbloqueo";
 
 // Led que se acenderá/apagará
 const int ledPin = LED_BUILTIN;
