@@ -5,8 +5,8 @@
 #include <Preferences.h>
 
 //Variables de conexion wifi y mqtt
-const char* ssid = "Grelo_Casa"; 
-const char* password = "NH4zX6PT";
+const char* ssid = "YOUR SSID"; 
+const char* password = "YOUR PASSWORD";
 const char* mqttServer = "panel.servergal.com.es";
 const int mqttPort = 1883;
 const char* mqttUser = "";
