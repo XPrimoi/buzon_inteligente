@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ESP32Servo.h>
+#include <ArduinoJson.h>
 
 Servo servo;
 const int servoPin = 13;
@@ -10,27 +11,42 @@ const int bluePin = 4;
 const int greenPin = 5;
 const int redPin = 6;
 
+// Definición del Enum para el estado del servo
+enum EstadoServo { CERRADO, ABIERTO };
+EstadoServo estadoServo = CERRADO;
+
 // Credenciais da rede Wifi
 const char* ssid = "ssid";
 const char* password = "psswrd";
 
 // Configuración do broker MQTT
+const char* clientID = "NAPIoT-P3-buzonInteligente-servo-XPM-15392";
 const char* mqtt_server = "test.mosquitto.org";
 const int mqtt_port = 1883;
-const char* mqtt_topic = "NAPIoT2025/buzon/servo/desbloqueo";
+
+// Topics
+const char* servoTopic = "buzon/servo/desbloqueo";
+const char* rgbTopic = "buzon/rgb";
+const char* colisionTopic = "buzon/colision/inferior";
+const char* estadoServoTopic = "buzon/servo/estado";
 
 // Led que se acenderá/apagará
-const int ledPin = LED_BUILTIN;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-unsigned long ultimoTiempo = 0;
-const long intervalo = 500;
-int ultimoAngulo= -1;
-bool flag = false;
+// Control servo
+unsigned long ultimoTiempoServo = millis();
+const long intervaloServo = 500;
+bool flagPublicarEstado = false;
+
+// Variables para el LED RGB Temporal
+unsigned long rgbInicioMillis = millis();
+const long intervaloRgb = 5000;
+bool rgbEncendido = false;
 
 int estadoActualColision;
 int estadoAnteriorColision;
+
 
 // Función para conectar á WiFi
 void setup_wifi() {
@@ -49,40 +65,51 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
+
 // Función de callback que procesa as mensaxes MQTT recibidas
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Mensaxe recibida[");
-  Serial.print(topic);
-  Serial.print("] ");
+
   // Imprimese o payload da mensaxe
   String message;
-  for (int i = 0; i < length; i++) {
-    message += (char)payload[i];
+  for (int i = 0; i< length; i++) message += (char)payload[i];
+
+  Serial.printf("Mensaxe recibida[%s]: %s\n", topic, message);
+  
+  // Apertura del servo
+  if (topic == servoTopic){
+    if (message == "1") {
+      analogWrite(greenPin, 0);
+      
+      if(estadoServo == CERRADO){
+        servo.write(180);
+        delay(650);
+        servo.write(90);
+        estadoServo = ABIERTO;
+      }
+
+      analogWrite(greenPin, 255);
+      
+    }
+    flagPublicarEstado = true;
+
+  } else if (topic == rgbTopic) {
+    StaticJsonDocument<200> doc;
+    DeserializationError error = deserializeJson(doc, payload, length);
+
+    if (!error) {
+      int r = doc["r"];
+      int g = doc["g"];
+      int b = doc["b"];
+
+      // Aplicar color (Invertir valores: 255 - valor)
+      analogWrite(redPin, 255 - r);
+      analogWrite(greenPin, 255 - g);
+      analogWrite(bluePin, 255 - b);
+
+      rgbInicioMillis = millis();
+      rgbEncendido = true;
+    }
   }
-  Serial.println(message);
-  // Controlamos o estado do LED en fucnión da mensaxe
-  if (message == "0") {
-    digitalWrite(ledPin, LOW); // Apaga o LED
-    Serial.println("LED OFF");
-    analogWrite(redPin, 0);
-    delay(1000);
-    analogWrite(redPin, 255);
-  } else if (message == "1") {
-    digitalWrite(ledPin, HIGH); // Acende o LED
-    Serial.println("LED ON");
-
-    analogWrite(greenPin, 0);
-
-    servo.write(180);
-    delay(650);
-    servo.write(90);
-
-    analogWrite(greenPin, 255);
-    
-  } else {
-    Serial.println("Comando descoñecido");
-  }
-  flag = true;
 }
 
 // Reconecta co broker MQTT se se perde a conexión
@@ -91,10 +118,10 @@ void reconnect() {
     Serial.print("Intentando conectar a broker MQTT...");
     // Inténtase conectar indicando o ID do dispositivo
     //IMPORTANTE: este ID debe ser único!
-    if (client.connect("NAPIoT-P2-buzonInteligente-servo-XPM-15392")) {
+    if (client.connect(clientID)) {
       Serial.println("conectado!");
       // Subscripción ao topic
-      client.subscribe(mqtt_topic);
+      client.subscribe(servoTopic);
       Serial.println("Subscrito ao topic");
     } else {
       Serial.print("erro na conexión, erro=");
@@ -106,27 +133,25 @@ void reconnect() {
 }
 
 
+
 void setup() {
+  // Configuración do porto serie
+  Serial.begin(115200);
+  
   servo.attach(servoPin);
   servo.write(90);
 
   pinMode(colisionPin, INPUT);
   pinMode(wledPin, OUTPUT);
-  digitalWrite(wledPin, LOW);
-
   pinMode(redPin, OUTPUT);
   pinMode(bluePin, OUTPUT);
   pinMode(greenPin, OUTPUT);
 
+  digitalWrite(wledPin, LOW);
   analogWrite(redPin, 255);
   analogWrite(bluePin, 255);
   analogWrite(greenPin, 255);
 
-  // Configuración do pin do LED
-  pinMode(ledPin, OUTPUT);
-  digitalWrite(ledPin, LOW);
-  // Configuración do porto serie
-  Serial.begin(115200);
   // Conexión coa WiFi
   setup_wifi();
   // Configuración de MQTT
@@ -136,38 +161,54 @@ void setup() {
 
 void loop() {
   // Verifica se o cliente está conectado
-  if (!client.connected()) {
-    reconnect();
-  }
+  if (!client.connected()) reconnect();
   client.loop();
 
+  // Gestión del apagado automático del RGB
+  if(rgbEncendido){
+    if(millis() - rgbInicioMillis >= intervaloRgb){
+      analogWrite(redPin, 255);   // Apagar
+      analogWrite(greenPin, 255); 
+      analogWrite(bluePin, 255);  
+      rgbEncendido = false;
+    }
+  }
+
+  // Estado de la puerta
   estadoAnteriorColision = estadoActualColision;
   estadoActualColision = digitalRead(colisionPin);
+  client.publish(colisionTopic, "%d", estadoActualColision);
 
   if(estadoActualColision == 0) {
     digitalWrite(wledPin, LOW);
 
-    if(estadoAnteriorColision == 1){
+    // Si la puerta estaba abierta y ahora cerrada, se cierra el servo
+    if(estadoAnteriorColision == 1 && estadoServo == ABIERTO){
       Serial.println("Cerrando puerta");
       servo.write(0);
       delay(650);
       servo.write(90);
+    
+      estadoServo = CERRADO;
+      flagPublicarEstado = true;
     }
   } else {
     digitalWrite(wledPin, HIGH);
   }
 
-  if(flag){
+  // Publicar el estado del servo
+  if(flagPublicarEstado){
     unsigned long tiempoActual = millis();
-    if (tiempoActual - ultimoTiempo >= intervalo) {
+    if (tiempoActual - ultimoTiempoServo >= intervaloRgb) {
       
-      ultimoTiempo = tiempoActual;
+      ultimoTiempoServo = millis();
 
       char str[64] = {0};
-      sprintf(str, "{\"servoAngulo\": %d}", servo.read());
-      bool publica = client.publish("NAPIoT2025/buzonInteligente/servoAngulo", str);
-      flag = false;
+      sprintf(str, "%d", (estadoServo == ABIERTO ? 0 : 1));
+      bool publica = client.publish(estadoServoTopic, str);
+      flagPublicarEstado = false;
     }
   }
 }
+
 
