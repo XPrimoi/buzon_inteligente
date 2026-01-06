@@ -3,7 +3,7 @@
 #include <ESP32Servo.h>
 #include <ArduinoJson.h>
 
-// --- CONSTANTES Y PINES (Uso de mayúsculas para constantes) ---
+// CONSTANTES Y PINES
 const int PIN_SERVO = 13;
 const int PIN_COLISION = 38;
 const int PIN_WLED = 10;
@@ -15,7 +15,7 @@ const int ANGULO_ABIERTO = 180;
 const int ANGULO_CERRADO = 0;
 const int ANGULO_REPOSO = 90;
 
-// --- CONFIGURACIÓN RED ---
+// CONFIGURACIÓN RED 
 const char* ssid = "ssid";
 const char* password = "psswrd";
 const char* clientID = "NAPIoT-P3-buzonInteligente-XPM";
@@ -27,12 +27,12 @@ const char* TOPIC_RGB_CMD   = "buzon/rgb";
 const char* TOPIC_COLISION  = "buzon/colision/inferior";
 const char* TOPIC_ESTADO    = "buzon/servo/estado";
 
-// --- OBJETOS ---
+// OBJETOS
 Servo servo;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// --- ESTADOS Y TIMERS ---
+// ESTADOS Y TIMERS 
 enum EstadoServo { CERRADO, ABIERTO };
 EstadoServo estadoServo = CERRADO;
 
@@ -47,7 +47,7 @@ bool rgbEncendido = false;
 int estadoActualColision = 0;
 int estadoAnteriorColision = 0;
 
-// --- FUNCIONES AUXILIARES ---
+// FUNCIONES AUXILIARES
 
 void apagarRGB() {
   analogWrite(PIN_RED, 255);
