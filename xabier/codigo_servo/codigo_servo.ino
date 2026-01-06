@@ -3,96 +3,80 @@
 #include <ESP32Servo.h>
 #include <ArduinoJson.h>
 
-Servo servo;
-const int servoPin = 13;
-const int colisionPin = 38;
-const int wledPin = 10;
-const int bluePin = 4;
-const int greenPin = 5;
-const int redPin = 6;
+// --- CONSTANTES Y PINES (Uso de mayúsculas para constantes) ---
+const int PIN_SERVO = 13;
+const int PIN_COLISION = 38;
+const int PIN_WLED = 10;
+const int PIN_BLUE = 4;
+const int PIN_GREEN = 5;
+const int PIN_RED = 6;
 
-// Definición del Enum para el estado del servo
-enum EstadoServo { CERRADO, ABIERTO };
-EstadoServo estadoServo = CERRADO;
+const int ANGULO_ABIERTO = 180;
+const int ANGULO_CERRADO = 0;
+const int ANGULO_REPOSO = 90;
 
-// Credenciais da rede Wifi
+// --- CONFIGURACIÓN RED ---
 const char* ssid = "ssid";
 const char* password = "psswrd";
-
-// Configuración do broker MQTT
-const char* clientID = "NAPIoT-P3-buzonInteligente-servo-XPM-15392";
+const char* clientID = "NAPIoT-P3-buzonInteligente-XPM";
 const char* mqtt_server = "test.mosquitto.org";
-const int mqtt_port = 1883;
 
 // Topics
-const char* servoTopic = "buzon/servo/desbloqueo";
-const char* rgbTopic = "buzon/rgb";
-const char* colisionTopic = "buzon/colision/inferior";
-const char* estadoServoTopic = "buzon/servo/estado";
+const char* TOPIC_SERVO_CMD = "buzon/servo/desbloqueo";
+const char* TOPIC_RGB_CMD   = "buzon/rgb";
+const char* TOPIC_COLISION  = "buzon/colision/inferior";
+const char* TOPIC_ESTADO    = "buzon/servo/estado";
 
-// Led que se acenderá/apagará
+// --- OBJETOS ---
+Servo servo;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Control servo
-unsigned long ultimoTiempoServo = millis();
-const long intervaloServo = 500;
+// --- ESTADOS Y TIMERS ---
+enum EstadoServo { CERRADO, ABIERTO };
+EstadoServo estadoServo = CERRADO;
+
+unsigned long ultimoTiempoServo = 0;
+const long INTERVALO_ESTADO = 5000;
 bool flagPublicarEstado = false;
 
-// Variables para el LED RGB Temporal
-unsigned long rgbInicioMillis = millis();
-const long intervaloRgb = 5000;
+unsigned long rgbInicioMillis = 0;
+const long DURACION_RGB = 5000;
 bool rgbEncendido = false;
 
-int estadoActualColision;
-int estadoAnteriorColision;
+int estadoActualColision = 0;
+int estadoAnteriorColision = 0;
 
+// --- FUNCIONES AUXILIARES ---
 
-// Función para conectar á WiFi
-void setup_wifi() {
-  delay(10);
-  Serial.println();
-  Serial.print("Conectando a ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi conectada!");
-  Serial.println("IP: ");
-  Serial.println(WiFi.localIP());
+void apagarRGB() {
+  analogWrite(PIN_RED, 255);
+  analogWrite(PIN_GREEN, 255);
+  analogWrite(PIN_BLUE, 255);
+  rgbEncendido = false;
 }
 
+void moverServo(int angulo) {
+  servo.write(angulo);
+  delay(650);
+  servo.write(ANGULO_REPOSO);
+}
 
-// Función de callback que procesa as mensaxes MQTT recibidas
 void callback(char* topic, byte* payload, unsigned int length) {
-
-  // Imprimese o payload da mensaxe
-  String message;
-  for (int i = 0; i< length; i++) message += (char)payload[i];
-
-  Serial.printf("Mensaxe recibida[%s]: %s\n", topic, message);
+  String message = "";
+  for (int i = 0; i < length; i++) message += (char)payload[i];
   
-  // Apertura del servo
-  if (topic == servoTopic){
-    if (message == "1") {
-      analogWrite(greenPin, 0);
-      
-      if(estadoServo == CERRADO){
-        servo.write(180);
-        delay(650);
-        servo.write(90);
-        estadoServo = ABIERTO;
-      }
+  Serial.printf("Mensaje recibido [%s]: %s\n", topic, message.c_str());
 
-      analogWrite(greenPin, 255);
-      
+  
+  if (strcmp(topic, TOPIC_SERVO_CMD) == 0) {
+    if (message == "1" && estadoServo == CERRADO) {
+      moverServo(ANGULO_ABIERTO);
+      estadoServo = ABIERTO;
+      flagPublicarEstado = true;
     }
-    flagPublicarEstado = true;
-
-  } else if (topic == rgbTopic) {
+  } 
+  else if (strcmp(topic, TOPIC_RGB_CMD) == 0) {
     StaticJsonDocument<200> doc;
     DeserializationError error = deserializeJson(doc, payload, length);
 
@@ -102,9 +86,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
       int b = doc["b"];
 
       // Aplicar color (Invertir valores: 255 - valor)
-      analogWrite(redPin, 255 - r);
-      analogWrite(greenPin, 255 - g);
-      analogWrite(bluePin, 255 - b);
+      analogWrite(PIN_RED, 255 - r);
+      analogWrite(PIN_GREEN, 255 - g);
+      analogWrite(PIN_BLUE, 255 - b);
 
       rgbInicioMillis = millis();
       rgbEncendido = true;
@@ -112,103 +96,76 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-// Reconecta co broker MQTT se se perde a conexión
 void reconnect() {
   while (!client.connected()) {
-    Serial.print("Intentando conectar a broker MQTT...");
-    // Inténtase conectar indicando o ID do dispositivo
-    //IMPORTANTE: este ID debe ser único!
+    Serial.print("MQTT Conectando...");
     if (client.connect(clientID)) {
-      Serial.println("conectado!");
-      // Subscripción ao topic
-      client.subscribe(servoTopic);
-      Serial.println("Subscrito ao topic");
+      Serial.println("¡Conectado!");
+      client.subscribe(TOPIC_SERVO_CMD);
+      client.subscribe(TOPIC_RGB_CMD);
     } else {
-      Serial.print("erro na conexión, erro=");
-      Serial.print(client.state());
-      Serial.println(" probando de novo en 5 segundos");
+      Serial.print("Error: "); Serial.println(client.state());
       delay(5000);
     }
   }
 }
 
-
-
 void setup() {
-  // Configuración do porto serie
   Serial.begin(115200);
   
-  servo.attach(servoPin);
-  servo.write(90);
+  servo.attach(PIN_SERVO);
+  servo.write(ANGULO_REPOSO);
 
-  pinMode(colisionPin, INPUT);
-  pinMode(wledPin, OUTPUT);
-  pinMode(redPin, OUTPUT);
-  pinMode(bluePin, OUTPUT);
-  pinMode(greenPin, OUTPUT);
+  pinMode(PIN_COLISION, INPUT);
+  pinMode(PIN_WLED, OUTPUT);
+  pinMode(PIN_RED, OUTPUT);
+  pinMode(PIN_GREEN, OUTPUT);
+  pinMode(PIN_BLUE, OUTPUT);
 
-  digitalWrite(wledPin, LOW);
-  analogWrite(redPin, 255);
-  analogWrite(bluePin, 255);
-  analogWrite(greenPin, 255);
+  digitalWrite(PIN_WLED, LOW);
+  apagarRGB();
 
-  // Conexión coa WiFi
-  setup_wifi();
-  // Configuración de MQTT
-  client.setServer(mqtt_server, mqtt_port);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+  
+  client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 }
 
 void loop() {
-  // Verifica se o cliente está conectado
   if (!client.connected()) reconnect();
   client.loop();
 
-  // Gestión del apagado automático del RGB
-  if(rgbEncendido){
-    if(millis() - rgbInicioMillis >= intervaloRgb){
-      analogWrite(redPin, 255);   // Apagar
-      analogWrite(greenPin, 255); 
-      analogWrite(bluePin, 255);  
-      rgbEncendido = false;
-    }
+  // Timer RGB
+  if (rgbEncendido && (millis() - rgbInicioMillis >= DURACION_RGB)) {
+    apagarRGB();
   }
 
-  // Estado de la puerta
-  estadoAnteriorColision = estadoActualColision;
-  estadoActualColision = digitalRead(colisionPin);
-  client.publish(colisionTopic, "%d", estadoActualColision);
-
-  if(estadoActualColision == 0) {
-    digitalWrite(wledPin, LOW);
-
-    // Si la puerta estaba abierta y ahora cerrada, se cierra el servo
-    if(estadoAnteriorColision == 1 && estadoServo == ABIERTO){
-      Serial.println("Cerrando puerta");
-      servo.write(0);
-      delay(650);
-      servo.write(90);
+  // Gestión de puerta inferior
+  estadoActualColision = digitalRead(PIN_COLISION);
+  
+  if (estadoActualColision != estadoAnteriorColision) {
+    char buffer[2];
+    sprintf(buffer, "%d", estadoActualColision);
+    client.publish(TOPIC_COLISION, buffer);
     
+    digitalWrite(PIN_WLED, estadoActualColision == 0 ? LOW : HIGH);
+
+    // Lógica de cierre automático
+    if (estadoActualColision == 0 && estadoServo == ABIERTO) {
+      Serial.println("Cierre automático");
+      moverServo(ANGULO_CERRADO);
       estadoServo = CERRADO;
       flagPublicarEstado = true;
     }
-  } else {
-    digitalWrite(wledPin, HIGH);
+    estadoAnteriorColision = estadoActualColision;
   }
 
-  // Publicar el estado del servo
-  if(flagPublicarEstado){
-    unsigned long tiempoActual = millis();
-    if (tiempoActual - ultimoTiempoServo >= intervaloRgb) {
-      
-      ultimoTiempoServo = millis();
-
-      char str[64] = {0};
-      sprintf(str, "%d", (estadoServo == ABIERTO ? 0 : 1));
-      bool publica = client.publish(estadoServoTopic, str);
-      flagPublicarEstado = false;
-    }
+  // Reporte de estado periódico o por evento
+  if (flagPublicarEstado || (millis() - ultimoTiempoServo >= INTERVALO_ESTADO)) {
+    ultimoTiempoServo = millis();
+    const char* txtEstado = (estadoServo == ABIERTO) ? "0" : "1";
+    client.publish(TOPIC_ESTADO, txtEstado);
+    flagPublicarEstado = false;
   }
 }
-
-
