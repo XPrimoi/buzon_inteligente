@@ -17,16 +17,18 @@ byte KEYPAD_COL_PINS[KEYPAD_COLS] = {D13, D12, D11, D10};  // Pines de columnas
 
 Keypad keypad = Keypad(makeKeymap(keypadKeys), KEYPAD_ROW_PINS, KEYPAD_COL_PINS, KEYPAD_ROWS, KEYPAD_COLS);  // Controlador del Keypad
 
-#define WIFI_SSID     /* Rellenar */  // ID de red WiFi
-#define WIFI_PASSWORD /* Rellenar */  // Contraseña de red WiFi
+#define WIFI_SSID     "POCOYo"/* Rellenar */  // ID de red WiFi
+#define WIFI_PASSWORD "pocoyoyo"/* Rellenar */  // Contraseña de red WiFi
 
 WiFiClient wifiClient;  // Cliente WiFi para el cliente MQTT
 
-#define MQTT_SERVER    "nodered.servergal.com.es"  // Servidor MQTT
-#define MQTT_PORT      1883                        // Puerto del servidor MQTT
-#define MQTT_CLIENT_ID "ESP#2"                     // ID de cliente a conectarse al servidor
-#define MQTT_USER      ""
-#define MQTT_PASSWORD  ""
+#define MQTT_CLOUDLET_SERVER    "nodered.servergal.com.es"  // Servidor MQTT del cloudlet
+#define MQTT_CLOUDLET_PORT      1883                        // Puerto del servidor MQTT del cloudlet
+#define MQTT_FOG_SERVER         "panel.servergal.com.es"    // Servidor MQTT del nodo fog
+#define MQTT_FOG_PORT           1884                        // Puerto del servidor MQTT del nodo fog
+#define MQTT_CLIENT_ID          "ESP#2"                     // ID de cliente a conectarse al servidor
+#define MQTT_USER               ""
+#define MQTT_PASSWORD           ""
 
 #define MQTT_TOPIC_KEYPAD "buzon/keypad"  // Tópico para enviar el código del keypad
 #define MQTT_TOPIC_RGB    "buzon/rgb"     // Tópico para enviar el valor RGB de iluminación del LED
@@ -71,19 +73,35 @@ void conectarWiFi() {
     Serial.println(WiFi.gatewayIP());
 }
 
-// Conexión con el broker MQTT
-void conectarBrokerMQTT() {
-    Serial.println("\nConectando al broker MQTT...");
-    mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
+// Conexión con el broker MQTT del nodo fog
+bool conectarFogMQTT() {
+    Serial.println("\nConectando al broker MQTT del nodo fog...");
+    mqttClient.setServer(MQTT_FOG_SERVER, MQTT_FOG_PORT);
 
-    // Intentos de conexión con el broker MQTT
+    // Intentos de conexión con el broker MQTT del nodo fog
+    if (!mqttClient.connected() && !mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
+        Serial.print("Fallo al conectar con el broker MQTT del nodo fog: ");
+        Serial.println(mqttClient.state());
+        return false;
+    } else {
+        Serial.println("Conectado al broker MQTT del nodo fog!");
+        return true;
+    }
+}
+
+// Conexión con el broker MQTT del Cloudlet
+void conectarCloudletMQTT() {
+    Serial.println("\nConectando al broker MQTT del Cloudlet...");
+    mqttClient.setServer(MQTT_CLOUDLET_SERVER, MQTT_CLOUDLET_PORT);
+
+    // Intentos de conexión con el broker MQTT de Cloudlet
     while (!mqttClient.connected() && !mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
-        Serial.print("Fallo al conectar con el broker MQTT: ");
+        Serial.print("Fallo al conectar con el broker MQTT del Cloudlet: ");
         Serial.println(mqttClient.state());
         delay(1000);
     }
 
-    Serial.println("Conectado al broker MQTT!");
+    Serial.println("Conectado al broker MQTT del Cloudlet!");
 }
 
 // Envío de valor de iluminación al led RGB con un color específico
@@ -107,8 +125,11 @@ void iluminarRGB(Color color) {
 void setup() {
     Serial.begin(9600);
 
-    conectarWiFi();        // Conexión WiFi
-    conectarBrokerMQTT();  // Conexión MQTT
+    conectarWiFi();                  // Conexión WiFi
+    bool conectadoFog = conectarFogMQTT(); // Conexión MQTT con el Nodo Fog
+    if (!conectadoFog) {
+        conectarCloudletMQTT();  // Conexión MQTT con el Cloudlet
+    };       
 }
 
 void loop() {
@@ -124,7 +145,7 @@ void loop() {
 
     // Borrar el código guardado si el tiempo límite es sobrepasado
     if (codigoSize > 0 && codigoSavedUntil <= currentMillis) {
-        Serial.println("Demasiado tiempo entre pulsaciones. Introduzca el código de nuevo.");
+        Serial.println("Código borrado por timeout entre pulsaciones.");
         codigoSize = 0;
         iluminarRGB(COLOR_BLUE);
     }
@@ -156,6 +177,7 @@ void loop() {
             // Borrado del código
             case KEYPAD_CLEAR_KEY: {
                 codigoSize = 0;
+                Serial.println("Código borrado.");
                 iluminarRGB(COLOR_BLUE);
             } break;
 
@@ -165,7 +187,7 @@ void loop() {
                     codigo[codigoSize] = pressedKey;
                     codigoSize++;
                 } else {
-                    Serial.println("\nLongitud máxima de código alcanzada!");
+                    Serial.println("Longitud máxima de código alcanzada!");
                     iluminarRGB(COLOR_AMBER);
                 }
             } break;
