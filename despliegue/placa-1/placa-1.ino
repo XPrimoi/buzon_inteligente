@@ -4,129 +4,144 @@
 #include <MFRC522.h>
 #include <Preferences.h>
 
-//Variables de conexion wifi y mqtt
-const char* ssid = "YOUR SSID"; 
-const char* password = "YOUR PASSWORD";
-const char* mqttServer = "panel.servergal.com.es";
-const int mqttPort = 1883;
-const char* mqttUser = "";
-const char* mqttPassword = "";
+// --- CREDENCIALES WIFI ---
+const char* ssid = "SSID"; 
+const char* password = "PASSWORD";
 
-// TOPIC MQTT
+// --- CONFIGURACIÓN MQTT ---
+#define MQTT_CLOUDLET_SERVER    "panel.servergal.com.es"
+#define MQTT_CLOUDLET_PORT      1883
+#define MQTT_FOG_SERVER         "fog.servergal.com.es"
+#define MQTT_FOG_PORT           1884
+#define MQTT_CLIENT_ID          "ESP#1_Firebeetle"
+#define MQTT_USER               "" 
+#define MQTT_PASSWORD           ""  
+
 const char* mqttTopic = "buzon/rfid"; 
 const char* mqttRGB = "buzon/rgb";
 
-// Configuracion de pines de rfid
-#define SS_PIN  A1
-#define RST_PIN 21
+// Variables para almacenar el servidor actual activo
+const char* activeServer = MQTT_FOG_SERVER;
+int activePort = MQTT_FOG_PORT;
+
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient); 
+
+#define SS_PIN  A1  
+#define RST_PIN 21 
 #define LED_PIN 2         
+
 #define MAX_USUARIOS 20   
 
-// creacion de tarjeta maestra
-byte masterCard[4] = {19, 231, 249, 152}; 
+// --- OBJETOS GLOBALES ---
+MFRC522 rfid(SS_PIN, RST_PIN);
+Preferences preferences;
 
+// Tarjeta maestra y usuarios
+byte masterCard[4] = {19, 231, 249, 152}; 
 char jsonPayload[64]; 
 
-
-// definicion de usuario
 struct Usuario {
   byte uid[4];
   bool esValido; 
 };
 
-// Limite de usuarios
 Usuario usuarios[MAX_USUARIOS]; 
-
-// Objetos Globales
-WiFiClient espClient;
-PubSubClient client(espClient);
-MFRC522 rfid(SS_PIN, RST_PIN);
-Preferences preferences;
-
 bool modoAdmin = false;
 
+// --- DECLARACIÓN DE FUNCIONES ---
+void setup_wifi();
+void gestionarConexionMQTT();
+void gestionarUsuarios(byte* uidLeido);
+int buscarUsuario(byte* uid);
+int buscarSlotVacio();
+void guardarUsuarios();
+void cargarUsuarios();
+bool compararUID(byte* leido, byte* guardado);
 
-// SETUP
+// --- SETUP ---
 void setup() {
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
+  
+  // 1. Iniciar WiFi
   setup_wifi();
-  client.setServer(mqttServer, mqttPort);
 
+  // 2. Iniciar MQTT (Determina servidor)
+  // 
+  gestionarConexionMQTT(); 
+
+  // 3. Iniciar RFID y Memoria
   SPI.begin();
   rfid.PCD_Init();
   preferences.begin("access_db", false);
   cargarUsuarios();
 
-  Serial.println(F("--- SISTEMA RFID JSON ---"));
+  Serial.println(F("--- SISTEMA RFID LISTO ---"));
+  // Indicar visualmente en el hardware
+  pinMode(SS_PIN, OUTPUT); 
 }
 
-
+// --- LOOP ---
 void loop() {
-  if (!client.connected()) {
-    reconnect();
+  // Verificación y reconexión MQTT
+  if (!mqttClient.connected()) {
+    gestionarConexionMQTT();
   }
-  client.loop();
+  mqttClient.loop();
 
-  // Si no hay tarjeta, salir
+  // Revisar lector RFID
   if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) return;
 
   byte uidLeido[4];
   memcpy(uidLeido, rfid.uid.uidByte, 4); 
 
-  // Si hay Tarjeta Maestra
+  Serial.print("UID Leído: ");
+  for(int i=0; i<4; i++) { Serial.print(uidLeido[i]); Serial.print(" "); }
+  Serial.println();
+
+  // --- LÓGICA DE TARJETA MAESTRA ---
   if (compararUID(uidLeido, masterCard)) {
     modoAdmin = !modoAdmin; 
     digitalWrite(LED_PIN, modoAdmin); 
-    if (modoAdmin) 
-    {
+    
+    if (modoAdmin) {
       Serial.println(F(">> MODO ADMIN ON"));
       sprintf(jsonPayload, "{\"r\": 125, \"g\": 125, \"b\": 0}");
-      client.publish(mqttRGB, jsonPayload); 
-    }
-
-    else
-    {
+    } else {
       Serial.println(F(">> MODO ADMIN OFF"));
       sprintf(jsonPayload, "{\"r\": 0, \"g\": 125, \"b\": 125}");
-      client.publish(mqttRGB, jsonPayload); 
-    } 
+    }
+    mqttClient.publish(mqttRGB, jsonPayload); 
     delay(1000); 
   }
   
-  // Modo Admin
+  // --- MODO ADMINISTRADOR (Añadir/Borrar) ---
   else if (modoAdmin) {
     gestionarUsuarios(uidLeido);
     delay(1000);
   }
   
-  // Modo Normal
+  // --- MODO NORMAL (Acceso) ---
   else {
     int indice = buscarUsuario(uidLeido);
     
-    // Buffer para crear el mensaje
     if (indice != -1) {
       // ACCESO CONCEDIDO
-      // Creamos el JSON
+      Serial.println(F(">> ACCESO CONCEDIDO"));
+      // sprintf(jsonPayload, "{\"rfid\": true}");
+      // mqttClient.publish(mqttTopic, jsonPayload);
       
-      Serial.println(F(">> ACCESO CONCEDIDO -> Enviando JSON: {\"rfid\": true}"));
-      client.publish(mqttTopic, "1"); 
-
-      //sprintf(jsonPayload, "{\"r\": 0, \"g\": 255, \"b\": 0}");
-      //client.publish(mqttRGB, jsonPayload); 
-
+      mqttClient.publish(mqttTopic, "1"); 
       
+      // sprintf(jsonPayload, "{\"r\": 0, \"g\": 255, \"b\": 0}");
+      // mqttClient.publish(mqttRGB, jsonPayload); 
+
     } else {
       // ACCESO DENEGADO
-      // Creamos el JSON: { "rfid": false }
+      Serial.println(F(">> ACCESO DENEGADO"));
       sprintf(jsonPayload, "{\"rfid\": false}");
-      
-      Serial.println(F(">> ACCESO DENEGADO -> Enviando JSON: {\"rfid\": false}"));
-      client.publish(mqttTopic, "0"); 
-
-      //sprintf(jsonPayload, "{\"r\": 255, \"g\": 0, \"b\": 0}");
-      //client.publish(mqttRGB, jsonPayload); 
-      
+      mqttClient.publish(mqttTopic, "0"); 
     }
     delay(1000); 
   }
@@ -135,7 +150,7 @@ void loop() {
   rfid.PCD_StopCrypto1();
 }
 
-// FUNCIONES AUXILIARES 
+// --- FUNCIONES AUXILIARES ---
 
 void setup_wifi() {
   delay(10);
@@ -146,18 +161,33 @@ void setup_wifi() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println("\nWiFi conectado");
+  Serial.println("\nWiFi conectado. IP: ");
+  Serial.println(WiFi.localIP());
 }
 
-void reconnect() {
-  if (!client.connected()) {
-    Serial.print("Reconectando MQTT...");
-    if (client.connect("NodoNAPIoT_Firebeetle_JSON", mqttUser, mqttPassword)) {
-      Serial.println("conectado");
+// Lógica unificada para conectar/reconectar
+void gestionarConexionMQTT() {
+  // Primero intentamos FOG
+  if (!mqttClient.connected()) {
+    Serial.print("Intentando FOG (Puerto "); Serial.print(MQTT_FOG_PORT); Serial.println(")...");
+    mqttClient.setServer(MQTT_FOG_SERVER, MQTT_FOG_PORT);
+    
+    if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
+      Serial.println("Conectado a FOG Node.");
+      activeServer = MQTT_FOG_SERVER;
+      activePort = MQTT_FOG_PORT;
+      return;
     } else {
-      Serial.print("falló rc=");
-      Serial.print(client.state());
-      Serial.println(" reintentando...");
+      Serial.print("ERROR FOG: Fallo de conexión. Código de estado = ");
+      Serial.println(mqttClient.state()); 
+    }
+  }
+
+  if (!mqttClient.connected()) {
+    Serial.println("Saltando a CLOUDLET...");
+    mqttClient.setServer(MQTT_CLOUDLET_SERVER, MQTT_CLOUDLET_PORT);
+    if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
+      Serial.println("Conectado a Cloudlet.");
     }
   }
 }
@@ -167,12 +197,16 @@ void gestionarUsuarios(byte* uidLeido) {
     if (indice != -1) {
       usuarios[indice].esValido = false; 
       Serial.println(F("Usuario borrado."));
+      sprintf(jsonPayload, "{\"r\": 255, \"g\": 255, \"b\": 0}");
+      mqttClient.publish(mqttRGB, jsonPayload);
     } else {
       int slotVacio = buscarSlotVacio();
       if (slotVacio != -1) {
         memcpy(usuarios[slotVacio].uid, uidLeido, 4);
         usuarios[slotVacio].esValido = true;
         Serial.println(F("Usuario agregado."));
+        sprintf(jsonPayload, "{\"r\": 0, \"g\": 0, \"b\": 255}");
+        mqttClient.publish(mqttRGB, jsonPayload);
       } else {
         Serial.println(F("Memoria llena."));
       }
