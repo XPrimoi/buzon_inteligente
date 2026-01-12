@@ -33,6 +33,7 @@ const char* TOPIC_SERVO_CMD = "buzon/servo/desbloqueo";
 const char* TOPIC_RGB_CMD   = "buzon/rgb";
 const char* TOPIC_COLISION  = "buzon/colision/inferior";
 const char* TOPIC_ESTADO    = "buzon/servo/estado";
+const char* TOPIC_LIGHT     = "buzon/luz";
 
 // OBJETOS
 Servo servo;
@@ -41,10 +42,8 @@ PubSubClient client(espClient);
 
 // ESTADOS Y TIMERS 
 enum EstadoServo { CERRADO, ABIERTO };
-EstadoServo estadoServo = ABIERTO;
+EstadoServo estadoServo = CERRADO;
 
-unsigned long ultimoTiempoServo = 0;
-const long INTERVALO_ESTADO = 5000;
 bool flagPublicarEstado = false;
 
 unsigned long rgbInicioMillis = 0;
@@ -67,6 +66,8 @@ void moverServo(int angulo) {
   servo.write(angulo);
   delay(650);
   servo.write(ANGULO_REPOSO);
+  flagPublicarEstado = true;
+  estadoServo = (angulo == ANGULO_ABIERTO) ? ABIERTO : CERRADO;
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -77,11 +78,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   
   if (strcmp(topic, TOPIC_SERVO_CMD) == 0) {
-    if (message == "true" && estadoServo == CERRADO) {
-      moverServo(ANGULO_ABIERTO);
-      estadoServo = ABIERTO;
-      flagPublicarEstado = true;
-    }
+    if (message == "true" && estadoServo == CERRADO) moverServo(ANGULO_ABIERTO);
   } 
   else if (strcmp(topic, TOPIC_RGB_CMD) == 0) {
     StaticJsonDocument<200> doc;
@@ -101,6 +98,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
       rgbEncendido = true;
     }
   }
+  else if (strcmp(topic, TOPIC_LIGHT) == 0){
+    digitalWrite(PIN_WLED, (String(message).toInt() == 1) ? HIGH : LOW);
+    Serial.print(message);
+    Serial.print(" == ");
+    Serial.println(String(message).toInt());
+  }
 }
 
 void reconnect() {
@@ -112,6 +115,7 @@ void reconnect() {
       Serial.println("¡Conectado a FOG!");
       client.subscribe(TOPIC_SERVO_CMD);
       client.subscribe(TOPIC_RGB_CMD);
+      client.subscribe(TOPIC_LIGHT);
       return;
     
     } else {
@@ -126,6 +130,7 @@ void reconnect() {
       Serial.println("¡Conectado a CLOUD!");
       client.subscribe(TOPIC_SERVO_CMD);
       client.subscribe(TOPIC_RGB_CMD);
+      client.subscribe(TOPIC_LIGHT);
       return;
     
     } else {
@@ -182,15 +187,12 @@ void loop() {
     if (estadoActualColision == 0 && estadoServo == ABIERTO) {
       Serial.println("Cierre automático");
       moverServo(ANGULO_CERRADO);
-      estadoServo = CERRADO;
-      flagPublicarEstado = true;
     }
     estadoAnteriorColision = estadoActualColision;
   }
 
   // Reporte de estado periódico o por evento
-  if (flagPublicarEstado || (millis() - ultimoTiempoServo >= INTERVALO_ESTADO)) {
-    ultimoTiempoServo = millis();
+  if (flagPublicarEstado) {
     const char* txtEstado = (estadoServo == ABIERTO) ? "0" : "1";
     client.publish(TOPIC_ESTADO, txtEstado);
     flagPublicarEstado = false;
