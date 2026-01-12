@@ -99,10 +99,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     }
   }
   else if (strcmp(topic, TOPIC_LIGHT) == 0){
-    digitalWrite(PIN_WLED, (String(message).toInt() == 1) ? HIGH : LOW);
-    Serial.print(message);
-    Serial.print(" == ");
-    Serial.println(String(message).toInt());
+    digitalWrite(PIN_WLED, String(message).toInt());
   }
 }
 
