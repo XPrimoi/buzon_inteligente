@@ -17,18 +17,18 @@ byte KEYPAD_COL_PINS[KEYPAD_COLS] = {D13, D12, D11, D10};  // Pines de columnas
 
 Keypad keypad = Keypad(makeKeymap(keypadKeys), KEYPAD_ROW_PINS, KEYPAD_COL_PINS, KEYPAD_ROWS, KEYPAD_COLS);  // Controlador del Keypad
 
-#define WIFI_SSID     "POCOYo"/* Rellenar */  // ID de red WiFi
-#define WIFI_PASSWORD "pocoyoyo"/* Rellenar */  // Contraseña de red WiFi
+#define WIFI_SSID     /* Rellenar */  // ID de red WiFi
+#define WIFI_PASSWORD /* Rellenar */  // Contraseña de red WiFi
 
 WiFiClient wifiClient;  // Cliente WiFi para el cliente MQTT
 
-#define MQTT_CLOUDLET_SERVER    "nodered.servergal.com.es"  // Servidor MQTT del cloudlet
-#define MQTT_CLOUDLET_PORT      1883                        // Puerto del servidor MQTT del cloudlet
-#define MQTT_FOG_SERVER         "panel.servergal.com.es"    // Servidor MQTT del nodo fog
-#define MQTT_FOG_PORT           1884                        // Puerto del servidor MQTT del nodo fog
-#define MQTT_CLIENT_ID          "ESP#2"                     // ID de cliente a conectarse al servidor
-#define MQTT_USER               ""
-#define MQTT_PASSWORD           ""
+#define MQTT_CLOUDLET_SERVER "nodered.servergal.com.es"  // Servidor MQTT del cloudlet
+#define MQTT_CLOUDLET_PORT   1883                        // Puerto del servidor MQTT del cloudlet
+#define MQTT_FOG_SERVER      "panel.servergal.com.es"    // Servidor MQTT del nodo fog
+#define MQTT_FOG_PORT        1884                        // Puerto del servidor MQTT del nodo fog
+#define MQTT_CLIENT_ID       "ESP#2"                     // ID de cliente a conectarse al servidor
+#define MQTT_USER            ""
+#define MQTT_PASSWORD        ""
 
 #define MQTT_TOPIC_KEYPAD "buzon/keypad"  // Tópico para enviar el código del keypad
 #define MQTT_TOPIC_RGB    "buzon/rgb"     // Tópico para enviar el valor RGB de iluminación del LED
@@ -125,11 +125,11 @@ void iluminarRGB(Color color) {
 void setup() {
     Serial.begin(9600);
 
-    conectarWiFi();                  // Conexión WiFi
-    bool conectadoFog = conectarFogMQTT(); // Conexión MQTT con el Nodo Fog
+    conectarWiFi();                         // Conexión WiFi
+    bool conectadoFog = conectarFogMQTT();  // Conexión MQTT con el Nodo Fog
     if (!conectadoFog) {
         conectarCloudletMQTT();  // Conexión MQTT con el Cloudlet
-    };       
+    };
 }
 
 void loop() {
