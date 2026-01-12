@@ -16,17 +16,10 @@ const int ANGULO_CERRADO = 0;
 const int ANGULO_REPOSO = 90;
 
 // CONFIGURACIÓN RED 
-const char* ssid = "iPhone_Xabier";
-const char* password = "TortugasNinja";
-const char* clientID = "NAPIoT-P4-buzonInteligente-XPM";
-
-// Constantes Cloudlet
-const char* mqtt_cloud = "test.mosquitto.org";
-const int mqtt_port_cloud = 1883;
-
-// Constantes Fog Computing
-const char* mqtt_fog = "panel.servergal.com.es";
-const int mqtt_port_fog = 1884;
+const char* ssid = "ssid";
+const char* password = "psswrd";
+const char* clientID = "NAPIoT-P3-buzonInteligente-XPM";
+const char* mqtt_server = "test.mosquitto.org";
 
 // Topics
 const char* TOPIC_SERVO_CMD = "buzon/servo/desbloqueo";
@@ -41,7 +34,7 @@ PubSubClient client(espClient);
 
 // ESTADOS Y TIMERS 
 enum EstadoServo { CERRADO, ABIERTO };
-EstadoServo estadoServo = ABIERTO;
+EstadoServo estadoServo = CERRADO;
 
 unsigned long ultimoTiempoServo = 0;
 const long INTERVALO_ESTADO = 5000;
@@ -77,7 +70,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   
   if (strcmp(topic, TOPIC_SERVO_CMD) == 0) {
-    if (message == "true" && estadoServo == CERRADO) {
+    if (message == "1" && estadoServo == CERRADO) {
       moverServo(ANGULO_ABIERTO);
       estadoServo = ABIERTO;
       flagPublicarEstado = true;
@@ -105,36 +98,15 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void reconnect() {
   while (!client.connected()) {
-    Serial.print("Intentando conectar a FOG");
-    client.setServer(mqtt_fog, mqtt_port_fog);
-
+    Serial.print("MQTT Conectando...");
     if (client.connect(clientID)) {
-      Serial.println("¡Conectado a FOG!");
+      Serial.println("¡Conectado!");
       client.subscribe(TOPIC_SERVO_CMD);
       client.subscribe(TOPIC_RGB_CMD);
-      return;
-    
     } else {
-      Serial.print("Fallo FOG (rc=");
-      Serial.print(client.state());
-      Serial.println(").");
-    }
-
-    Serial.print("Intentando conectar a CLOUD");
-    client.setServer(mqtt_cloud, mqtt_port_cloud);
-    if (client.connect(clientID)) {
-      Serial.println("¡Conectado a CLOUD!");
-      client.subscribe(TOPIC_SERVO_CMD);
-      client.subscribe(TOPIC_RGB_CMD);
-      return;
-    
-    } else {
-      Serial.print("Fallo CLOUD (rc=");
-      Serial.print(client.state());
-      Serial.println("). Reintentar en 5 segundos...");
+      Serial.print("Error: "); Serial.println(client.state());
       delay(5000);
     }
-
   }
 }
 
@@ -156,6 +128,7 @@ void setup() {
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   
+  client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 }
 
