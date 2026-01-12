@@ -8,11 +8,14 @@ const char* password = "Add password";
 
 #define MQTT_CLOUDLET_SERVER    "nodered.servergal.com.es"
 #define MQTT_CLOUDLET_PORT      1883   
-#define MQTT_FOG_SERVER         "panel.servergal.comm.es" 
+#define MQTT_FOG_SERVER         "panel.servergal.com.es" 
 #define MQTT_FOG_PORT           1884
 #define MQTT_CLIENT_ID          "ESP#3" 
 #define MQTT_USER               ""
 #define MQTT_PASSWORD           ""
+
+#define PUBLISH_INTERVAL 20000
+unsigned long lastPressurePublish = 0;
 
 // ===== MQTT TOPICS =====
 const char* mqttTopicIREvent = "buzon/ir";
@@ -62,7 +65,6 @@ bool connectFogMQTT() {
   Serial.println("\nConectando al broker MQTT del nodo fog...");
   client.setServer(MQTT_FOG_SERVER, MQTT_FOG_PORT);
 
-  // Intentos de conexión con el broker MQTT del nodo fog
   if (!client.connected() && !client.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
     Serial.print("Fallo al conectar con el broker MQTT del nodo fog: ");
     Serial.println(client.state());
@@ -133,7 +135,11 @@ void publishIREvent() {
 // ===== SENSOR READING FUNCTIONS =====
 void readPressureSensor() {
   pressureValue = analogRead(PIN_PRESSURE);
-  publishPressure(pressureValue);
+    if (millis() - lastPressurePublish >= PUBLISH_INTERVAL) { //limitado a 20s pola sensibilidade do sensor
+      publishPressure(pressureValue); 
+      lastPressurePublish = millis(); 
+    }
+
   if (pressureValue > PRESSURE_THRESHOLD && pressureValue != lastPressureSent) {
     Serial.println("\n[PRESION]");
     Serial.printf("Valor: %d\n", pressureValue);
@@ -209,8 +215,7 @@ void setup() {
   
   initializePins();
   initializeSensors();
-  
-  // Conexión WiFi bloqueante
+
   WiFi.begin(ssid, password);
   Serial.println("=========================================");
   Serial.print("Conectando a WiFi.");
@@ -221,14 +226,12 @@ void setup() {
   Serial.println("\nConectado a la red WiFi!");
   Serial.print("IP:  ");
   Serial.println(WiFi.localIP());
-  
-  // Intentar conexión primero con Fog, si falla conectar con Cloudlet
+
   bool isFogConnected = connectFogMQTT();
   if (!isFogConnected) {
     connectCloudletMQTT();
   }
   
-  // Configurar NTP después de WiFi conectado
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   
   Serial.println("\nSistema listo!\n");
@@ -236,7 +239,6 @@ void setup() {
 
 // ===== LOOP =====
 void loop() {
-  // Mantener conexión MQTT
   if (!client.connected()) {
     Serial.println("Reconectando al broker MQTT...");
     if (client.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {

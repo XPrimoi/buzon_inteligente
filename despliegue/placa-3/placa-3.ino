@@ -5,10 +5,17 @@
 // ===== WIFI & MQTT CONFIGURATION =====
 const char* ssid = "Add ssid";
 const char* password = "Add password";
-const char* mqttServer = "test.mosquitto.org";
-const int mqttPort = 1883;
-const char* mqttUser = "";
-const char* mqttPassword = "";
+
+#define MQTT_CLOUDLET_SERVER    "nodered.servergal.com.es"
+#define MQTT_CLOUDLET_PORT      1883   
+#define MQTT_FOG_SERVER         "panel.servergal.com.es" 
+#define MQTT_FOG_PORT           1884
+#define MQTT_CLIENT_ID          "ESP#3" 
+#define MQTT_USER               ""
+#define MQTT_PASSWORD           ""
+
+#define PUBLISH_INTERVAL 20000
+unsigned long lastPressurePublish = 0;
 
 // ===== MQTT TOPICS =====
 const char* mqttTopicIREvent = "buzon/ir";
@@ -39,7 +46,7 @@ bool irEnabled = false;
 
 // ===== HELPER FUNCTIONS =====
 void logMqttResult(bool published) {
-  Serial.println(published ?  " [MQTT OK]" :  " [MQTT ERROR]");
+  Serial.println(published ?   " [MQTT OK]" :   " [MQTT ERROR]");
 }
 
 String getTimestampISO8601() {
@@ -53,6 +60,34 @@ String getTimestampISO8601() {
   return String(buffer);
 }
 
+// ===== MQTT CONNECTION FUNCTIONS =====
+bool connectFogMQTT() {
+  Serial.println("\nConectando al broker MQTT del nodo fog...");
+  client.setServer(MQTT_FOG_SERVER, MQTT_FOG_PORT);
+
+  if (!client.connected() && !client.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
+    Serial.print("Fallo al conectar con el broker MQTT del nodo fog: ");
+    Serial.println(client.state());
+    return false;
+  } else {
+    Serial.println("Conectado al broker MQTT del nodo fog!");
+    return true;
+  }
+}
+
+void connectCloudletMQTT() {
+  Serial.println("\nConectando al broker MQTT del Cloudlet...");
+  client.setServer(MQTT_CLOUDLET_SERVER, MQTT_CLOUDLET_PORT);
+
+  while (!client.connected() && !client.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
+    Serial.print("Fallo al conectar con el broker MQTT del Cloudlet: ");
+    Serial.println(client.state());
+    delay(1000);
+  }
+
+  Serial.println("Conectado al broker MQTT del Cloudlet!");
+}
+
 // ===== PUBLISH FUNCTIONS =====
 void publishPressure(int value) {
   bool limite = (value >= 4095);
@@ -60,7 +95,7 @@ void publishPressure(int value) {
   char jsonBuffer[64];
   sprintf(jsonBuffer, "{\"valor\":%d,\"limite\":%s}", value, limite ? "true" : "false");
 
-  Serial.print("Presion: ");
+  Serial.print("Presion:  ");
   Serial.print(value);
   Serial.print(" | Limite: ");
   Serial.println(limite ? "true" : "false");
@@ -81,7 +116,7 @@ void publishCollision(bool doorOpen) {
 
   bool published = false;
   if (client.connected()) {
-    published = client.publish(mqttTopicCollision, status);
+    published = client. publish(mqttTopicCollision, status);
   }
   logMqttResult(published);
 }
@@ -93,15 +128,19 @@ void publishIREvent() {
   Serial.println(timestamp);
   Serial.println("=====================================\n");
   
-  bool published = client.publish(mqttTopicIREvent, timestamp. c_str(), true);
+  bool published = client.publish(mqttTopicIREvent, timestamp.c_str(), true);
   logMqttResult(published);
 }
 
 // ===== SENSOR READING FUNCTIONS =====
 void readPressureSensor() {
   pressureValue = analogRead(PIN_PRESSURE);
-  publishPressure(pressureValue);
-  if (pressureValue > PRESSURE_THRESHOLD &&pressureValue != lastPressureSent) {
+    if (millis() - lastPressurePublish >= PUBLISH_INTERVAL) { //limitado a 20s pola sensibilidade do sensor
+      publishPressure(pressureValue); 
+      lastPressurePublish = millis(); 
+    }
+
+  if (pressureValue > PRESSURE_THRESHOLD && pressureValue != lastPressureSent) {
     Serial.println("\n[PRESION]");
     Serial.printf("Valor: %d\n", pressureValue);
     lastPressureSent = pressureValue;
@@ -116,10 +155,10 @@ void readCollisionSensor() {
     previousCollisionState = collisionState;
 
     Serial.println("\n[SENSOR COLISION]");
-    Serial.printf("Cambio: %d -> %d\n", !collisionState, collisionState);
+    Serial.printf("Cambio: %d -> %d\n", ! collisionState, collisionState);
 
     if (collisionState == HIGH) {
-      Serial.println("Estado: Puerta CERRADA");
+      Serial.println("Estado:  Puerta CERRADA");
       irEnabled = false;
     } else {
       Serial.println("Estado: Puerta ABIERTA");
@@ -176,35 +215,23 @@ void setup() {
   
   initializePins();
   initializeSensors();
-  
-  // Conexión WiFi bloqueante
+
   WiFi.begin(ssid, password);
-  Serial.println(".. ................................ .");
+  Serial.println("=========================================");
   Serial.print("Conectando a WiFi.");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   Serial.println("\nConectado a la red WiFi!");
-  Serial.print("IP: ");
+  Serial.print("IP:  ");
   Serial.println(WiFi.localIP());
-  
-  // Configurar servidor MQTT
-  client.setServer(mqttServer, mqttPort);
-  
-  // Conexión MQTT bloqueante
-  while (!client. connected()) {
-    Serial.println("Conectando al broker MQTT...");
-    if (client.connect("NodoNAPIoT", mqttUser, mqttPassword)) {
-      Serial.println("Conectado al broker MQTT!");
-    } else {
-      Serial.print("Error al conectar con broker MQTT: ");
-      Serial.print(client.state());
-      delay(2000);
-    }
+
+  bool isFogConnected = connectFogMQTT();
+  if (!isFogConnected) {
+    connectCloudletMQTT();
   }
   
-  // Configurar NTP después de WiFi conectado
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   
   Serial.println("\nSistema listo!\n");
@@ -212,13 +239,12 @@ void setup() {
 
 // ===== LOOP =====
 void loop() {
-  // Mantener conexión MQTT
   if (!client.connected()) {
     Serial.println("Reconectando al broker MQTT...");
-    if (client.connect("NodoNAPIoT", mqttUser, mqttPassword)) {
+    if (client.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
       Serial.println("Reconectado!");
     } else {
-      Serial.print("Error: ");
+      Serial.print("Error:  ");
       Serial.println(client.state());
       delay(2000);
     }
