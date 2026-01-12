@@ -3,7 +3,7 @@
 #include <ESP32Servo.h>
 #include <ArduinoJson.h>
 
-// --- CONSTANTES Y PINES (Uso de mayúsculas para constantes) ---
+// CONSTANTES Y PINES
 const int PIN_SERVO = 13;
 const int PIN_COLISION = 38;
 const int PIN_WLED = 10;
@@ -15,11 +15,18 @@ const int ANGULO_ABIERTO = 180;
 const int ANGULO_CERRADO = 0;
 const int ANGULO_REPOSO = 90;
 
-// --- CONFIGURACIÓN RED ---
+// CONFIGURACIÓN RED 
 const char* ssid = "ssid";
 const char* password = "psswrd";
 const char* clientID = "NAPIoT-P3-buzonInteligente-XPM";
-const char* mqtt_server = "test.mosquitto.org";
+
+// Constantes Cloudlet
+const char* mqtt_cloud = "test.mosquitto.org";
+const int mqtt_port_cloud = 1883;
+
+// Constantes Fog Computing
+const char* mqtt_fog = "panel.servergal.com.es";
+const int mqtt_port_fog = 1884;
 
 // Topics
 const char* TOPIC_SERVO_CMD = "buzon/servo/desbloqueo";
@@ -27,12 +34,12 @@ const char* TOPIC_RGB_CMD   = "buzon/rgb";
 const char* TOPIC_COLISION  = "buzon/colision/inferior";
 const char* TOPIC_ESTADO    = "buzon/servo/estado";
 
-// --- OBJETOS ---
+// OBJETOS
 Servo servo;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// --- ESTADOS Y TIMERS ---
+// ESTADOS Y TIMERS 
 enum EstadoServo { CERRADO, ABIERTO };
 EstadoServo estadoServo = CERRADO;
 
@@ -47,7 +54,7 @@ bool rgbEncendido = false;
 int estadoActualColision = 0;
 int estadoAnteriorColision = 0;
 
-// --- FUNCIONES AUXILIARES ---
+// FUNCIONES AUXILIARES
 
 void apagarRGB() {
   analogWrite(PIN_RED, 255);
@@ -98,15 +105,36 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void reconnect() {
   while (!client.connected()) {
-    Serial.print("MQTT Conectando...");
+    Serial.print("Intentando conectar a FOG");
+    client.setServer(mqtt_fog, mqtt_port_fog);
+
     if (client.connect(clientID)) {
-      Serial.println("¡Conectado!");
+      Serial.println("¡Conectado a FOG!");
       client.subscribe(TOPIC_SERVO_CMD);
       client.subscribe(TOPIC_RGB_CMD);
+      return;
+    
     } else {
-      Serial.print("Error: "); Serial.println(client.state());
+      Serial.print("Fallo FOG (rc=");
+      Serial.print(client.state());
+      Serial.println(").");
+    }
+
+    Serial.print("Intentando conectar a CLOUD");
+    client.setServer(mqtt_cloud, mqtt_port_cloud);
+    if (client.connect(clientID)) {
+      Serial.println("¡Conectado a CLOUD!");
+      client.subscribe(TOPIC_SERVO_CMD);
+      client.subscribe(TOPIC_RGB_CMD);
+      return;
+    
+    } else {
+      Serial.print("Fallo CLOUD (rc=");
+      Serial.print(client.state());
+      Serial.println("). Reintentar en 5 segundos...");
       delay(5000);
     }
+
   }
 }
 
@@ -128,7 +156,6 @@ void setup() {
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   
-  client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 }
 
