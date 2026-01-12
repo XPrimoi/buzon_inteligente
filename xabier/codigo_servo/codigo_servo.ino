@@ -19,7 +19,14 @@ const int ANGULO_REPOSO = 90;
 const char* ssid = "ssid";
 const char* password = "psswrd";
 const char* clientID = "NAPIoT-P3-buzonInteligente-XPM";
-const char* mqtt_server = "test.mosquitto.org";
+
+// Constantes Cloudlet
+const char* mqtt_cloud = "test.mosquitto.org";
+const int mqtt_port_cloud = 1883;
+
+// Constantes Fog Computing
+const char* mqtt_fog = "panel.servergal.com.es";
+const int mqtt_port_fog = 1884;
 
 // Topics
 const char* TOPIC_SERVO_CMD = "buzon/servo/desbloqueo";
@@ -98,15 +105,36 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void reconnect() {
   while (!client.connected()) {
-    Serial.print("MQTT Conectando...");
+    Serial.print("Intentando conectar a FOG");
+    client.setServer(mqtt_fog, mqtt_port_fog);
+
     if (client.connect(clientID)) {
-      Serial.println("¡Conectado!");
+      Serial.println("¡Conectado a FOG!");
       client.subscribe(TOPIC_SERVO_CMD);
       client.subscribe(TOPIC_RGB_CMD);
+      return;
+    
     } else {
-      Serial.print("Error: "); Serial.println(client.state());
+      Serial.print("Fallo FOG (rc=");
+      Serial.print(client.state());
+      Serial.println(").");
+    }
+
+    Serial.print("Intentando conectar a CLOUD");
+    client.setServer(mqtt_cloud, mqtt_port_cloud);
+    if (client.connect(clientID)) {
+      Serial.println("¡Conectado a CLOUD!");
+      client.subscribe(TOPIC_SERVO_CMD);
+      client.subscribe(TOPIC_RGB_CMD);
+      return;
+    
+    } else {
+      Serial.print("Fallo CLOUD (rc=");
+      Serial.print(client.state());
+      Serial.println("). Reintentar en 5 segundos...");
       delay(5000);
     }
+
   }
 }
 
@@ -128,7 +156,6 @@ void setup() {
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   
-  client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 }
 
